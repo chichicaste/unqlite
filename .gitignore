@@ -11,5 +11,22 @@ libunqlite.a
 .idea
 .vscode
 
+# .NET
+**/bin/
+**/obj/
+*.user
+*.suo
+
+
 # Build
 *build*
+build_x64/
+build_x86/
+output/
+
+# Visual Studio
+.vs/
+*.vcxproj.user
+*.vcxproj.filters
+*.sln.cache
+

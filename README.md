@@ -39,5 +39,75 @@ UnQLite is a self-contained C library without dependency. It requires very minim
 
 UnQLite is written in ANSI C, Thread-safe, Full reentrant, compiles unmodified and should run in most platforms including restricted embedded devices with a C compiler. UnQLite is extensively tested on Windows and UNIX systems especially Linux, FreeBSD, Oracle Solaris and Mac OS X.
 
-
 https://unqlite.symisc.net
+
+---
+
+## .NET Wrapper
+
+This repository includes a modern C# wrapper for UnQLite (.NET 9.0).
+
+### Quick Build
+
+```batch
+# Build all architectures (x64 and x86)
+build_all.bat
+```
+
+### Usage
+
+```csharp
+using UnqliteNet;
+
+// Create database
+using var db = new UnqliteDatabase("mydb.db");
+
+// Store data
+db.Store("key", "value");
+
+// Fetch data
+string value = db.FetchString("key");
+
+// Transactions
+using (var tx = db.BeginTransaction())
+{
+    db.Store("key1", "value1");
+    tx.Commit();
+}
+
+// Cursor iteration
+using var cursor = db.CreateCursor();
+if (cursor.First())
+{
+    do
+    {
+        Console.WriteLine($"{cursor.Key}: {cursor.DataAsString}");
+    } while (cursor.Next());
+}
+```
+
+### Features
+
+- ✅ Modern C# API (.NET 9.0)
+- ✅ Key/Value operations
+- ✅ ACID transactions
+- ✅ Cursor for iteration
+- ✅ Thread-safe
+- ✅ In-memory databases (`:mem:`)
+- ✅ No external dependencies
+
+### Build Output
+
+```
+output/
+├── include/
+│   └── unqlite.h
+├── x64/
+│   ├── lib/ (unqlite_static.lib, unqlite.lib, unqlite.exp)
+│   └── bin/ (unqlite.dll)
+└── x86/
+    ├── lib/ (unqlite_static.lib, unqlite.lib, unqlite.exp)
+    └── bin/ (unqlite.dll)
+```
+
+See [UnqliteNet/README.md](UnqliteNet/README.md) for detailed documentation.
