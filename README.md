@@ -88,13 +88,13 @@ if (cursor.First())
 
 ### Features
 
-- ✅ Modern C# API (.NET 9.0)
-- ✅ Key/Value operations
-- ✅ ACID transactions
-- ✅ Cursor for iteration
-- ✅ Thread-safe
-- ✅ In-memory databases (`:mem:`)
-- ✅ No external dependencies
+- Modern C# API (.NET 9.0)
+- Key/Value operations
+- ACID transactions
+- Cursor for iteration
+- Thread-safe
+- In-memory databases (`:mem:`)
+- No external dependencies
 
 ### Build Output
 

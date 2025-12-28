@@ -1,73 +1,73 @@
-# UnqliteNet - .NET Wrapper para UnQLite
+# UnqliteNet - .NET Wrapper for UnQLite
 
-Wrapper de .NET para la base de datos NoSQL embebida UnQLite.
+.NET wrapper for the UnQLite embedded NoSQL database.
 
-## Características
+## Features
 
-- API simple y moderna de C# (.NET 9.0)
-- Operaciones Key/Value básicas (Store, Fetch, Delete)
-- Transacciones (Begin, Commit, Rollback)
-- Cursor para iterar sobre todos los registros
-- Soporte para bases de datos en memoria y en disco
+- Simple and modern C# API (.NET 9.0)
+- Basic Key/Value operations (Store, Fetch, Delete)
+- Transactions (Begin, Commit, Rollback)
+- Cursor to iterate over all records
+- Support for in-memory and disk-based databases
 - Thread-safe
 
-## Compilación
+## Building
 
-1. Compilar la librería nativa de UnQLite:
+1. Build the native UnQLite library:
 ```bash
 cmake -S . -B build
 cmake --build build --config Release
 ```
 
-2. Compilar el wrapper de .NET:
+2. Build the .NET wrapper:
 ```bash
 cd UnqliteNet
 dotnet build --configuration Release
 ```
 
-## Uso
+## Usage
 
-### Básico
+### Basic
 
 ```csharp
 using UnqliteNet;
 
-// Abrir base de datos
+// Open database
 using var db = new UnqliteDatabase("test.db");
 
-// Almacenar datos
-db.Store("nombre", "Juan Pérez");
-db.Store("edad", "30");
+// Store data
+db.Store("name", "Juan Pérez");
+db.Store("age", "30");
 
-// Recuperar datos
-string nombre = db.FetchString("nombre");
-byte[] datos = db.Fetch("edad");
+// Retrieve data
+string name = db.FetchString("name");
+byte[] data = db.Fetch("age");
 
-// Verificar si existe
-bool exists = db.Contains("nombre");
+// Check if exists
+bool exists = db.Contains("name");
 
-// Eliminar
-db.Delete("edad");
+// Delete
+db.Delete("age");
 ```
 
-### Transacciones
+### Transactions
 
 ```csharp
 using (var tx = db.BeginTransaction())
 {
-    db.Store("clave1", "valor1");
-    db.Store("clave2", "valor2");
+    db.Store("key1", "value1");
+    db.Store("key2", "value2");
     
-    // Confirmar cambios
+    // Commit changes
     tx.Commit();
-    // O deshacer: tx.Rollback();
+    // Or rollback: tx.Rollback();
 }
 ```
 
 ### Cursor
 
 ```csharp
-// Iterar todos los registros
+// Iterate all records
 using var cursor = db.CreateCursor();
 if (cursor.First())
 {
@@ -77,34 +77,34 @@ if (cursor.First())
     } while (cursor.Next());
 }
 
-// O usando GetAll()
+// Or using GetAll()
 foreach (var kvp in db.GetAll())
 {
     Console.WriteLine($"{kvp.Key}: {Encoding.UTF8.GetString(kvp.Value)}");
 }
 ```
 
-### Bases de datos en memoria
+### In-Memory Databases
 
 ```csharp
 using var db = new UnqliteDatabase(":mem:", inMemory: true);
 ```
 
-## Clases Principales
+## Main Classes
 
-- `UnqliteDatabase` - Conexión principal a la base de datos
-- `UnqliteTransaction` - Manejo de transacciones
-- `UnqliteCursor` - Navegación avanzada por registros
-- `UnqliteException` - Excepciones específicas de UnQLite
+- `UnqliteDatabase` - Main database connection
+- `UnqliteTransaction` - Transaction handling
+- `UnqliteCursor` - Advanced record navigation
+- `UnqliteException` - UnQLite specific exceptions
 
-## Ejecutar el ejemplo
+## Run Example
 
 ```bash
 cd UnqliteNet.Example
 dotnet run
 ```
 
-## Requisitos
+## Requirements
 
 - .NET 9.0
-- unqlite_shared.dll (se copia automáticamente desde build/Release/)
+- unqlite_shared.dll (automatically copied from build/Release/)
