@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace UnqliteNet
@@ -117,6 +118,41 @@ namespace UnqliteNet
         public void Reset()
         {
             int rc = NativeMethods.unqlite_kv_cursor_reset(_cursorHandle);
+            UnqliteException.ThrowOnError(rc);
+        }
+
+        // Callback-based access for better performance with large data
+        public void GetKeyCallback(Action<byte[]> callback)
+        {
+            var consumer = new NativeMethods.UnqliteDataConsumer((pData, nDataLen, pUserData) =>
+            {
+                if (pData == IntPtr.Zero || nDataLen == 0)
+                    return 0;
+
+                byte[] data = new byte[nDataLen];
+                Marshal.Copy(pData, data, 0, (int)nDataLen);
+                callback(data);
+                return 0;
+            });
+
+            int rc = NativeMethods.unqlite_kv_cursor_key_callback(_cursorHandle, consumer, IntPtr.Zero);
+            UnqliteException.ThrowOnError(rc);
+        }
+
+        public void GetDataCallback(Action<byte[]> callback)
+        {
+            var consumer = new NativeMethods.UnqliteDataConsumer((pData, nDataLen, pUserData) =>
+            {
+                if (pData == IntPtr.Zero || nDataLen == 0)
+                    return 0;
+
+                byte[] data = new byte[nDataLen];
+                Marshal.Copy(pData, data, 0, (int)nDataLen);
+                callback(data);
+                return 0;
+            });
+
+            int rc = NativeMethods.unqlite_kv_cursor_data_callback(_cursorHandle, consumer, IntPtr.Zero);
             UnqliteException.ThrowOnError(rc);
         }
 
