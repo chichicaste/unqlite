@@ -6,6 +6,12 @@
     <Nullable>enable</Nullable>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Version>1.2.0</Version>
+    <Authors>Your Name</Authors>
+    <Description>UnQLite embedded database bindings for .NET</Description>
+    <PackageTags>unqlite;database;key-value;embedded</PackageTags>
+    <RepositoryUrl>https://github.com/yourusername/unqlite</RepositoryUrl>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,6 +19,15 @@
     <None Include="..\output\x64\bin\unqlite.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>unqlite.dll</Link>
+      <Pack>true</Pack>
+      <PackagePath>runtimes\win-x64\native\</PackagePath>
+    </None>
+    <!-- Copy x86 DLL -->
+    <None Include="..\output\x86\bin\unqlite.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>unqlite.x86.dll</Link>
+      <Pack>true</Pack>
+      <PackagePath>runtimes\win-x86\native\</PackagePath>
     </None>
   </ItemGroup>
 
