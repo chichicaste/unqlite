@@ -1,3 +1,7 @@
+// Copyright (c) 2025 Miguel Hernández
+// Licensed under the MIT License. See LICENSE file in the project root for full license information.
+// Portions inspired by Lightning.NET (https://github.com/CoreyKaylor/Lightning.NET) - MIT License
+
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -7,11 +11,22 @@ namespace UnqliteNet
 {
     public class UnqliteDatabase : IDisposable
     {
-        internal IntPtr _dbHandle;
-        private bool _disposed;
+        private readonly UnqliteDatabaseSafeHandle _dbHandle;
+
+        /// <summary>
+        /// Gets the native database handle (for internal use).
+        /// </summary>
+        internal IntPtr Handle => _dbHandle.DangerousGetHandle();
 
         public string FilePath { get; }
 
+        /// <summary>
+        /// Opens a UnQLite database with simple configuration options.
+        /// </summary>
+        /// <param name="filePath">Path to the database file, or null for in-memory database.</param>
+        /// <param name="readOnly">Open in read-only mode.</param>
+        /// <param name="createIfNotExists">Create the database if it doesn't exist.</param>
+        /// <param name="inMemory">Create an in-memory database.</param>
         public UnqliteDatabase(string filePath, bool readOnly = false, bool createIfNotExists = true, bool inMemory = false)
         {
             FilePath = filePath;
@@ -28,8 +43,33 @@ namespace UnqliteNet
             if (inMemory)
                 mode |= NativeMethods.UNQLITE_OPEN_IN_MEMORY;
 
-            int rc = NativeMethods.unqlite_open(out _dbHandle, filePath ?? ":mem:", mode);
+            IntPtr handle;
+            int rc = NativeMethods.unqlite_open(out handle, filePath ?? ":mem:", mode);
             UnqliteException.ThrowOnError(rc);
+
+            _dbHandle = new UnqliteDatabaseSafeHandle(handle, ownsHandle: true);
+        }
+
+        /// <summary>
+        /// Opens a UnQLite database using fluent configuration.
+        /// </summary>
+        /// <param name="filePath">Path to the database file, or null for in-memory database.</param>
+        /// <param name="configuration">The database configuration.</param>
+        public UnqliteDatabase(string filePath, DatabaseConfiguration configuration)
+        {
+            if (configuration == null)
+                throw new ArgumentNullException(nameof(configuration));
+
+            FilePath = filePath;
+
+            IntPtr handle;
+            int rc = NativeMethods.unqlite_open(out handle, filePath ?? ":mem:", configuration.OpenFlags);
+            UnqliteException.ThrowOnError(rc);
+
+            _dbHandle = new UnqliteDatabaseSafeHandle(handle, ownsHandle: true);
+
+            // Apply additional configuration settings
+            configuration.ApplyTo(Handle);
         }
 
         public static string Version
@@ -37,7 +77,7 @@ namespace UnqliteNet
             get
             {
                 IntPtr versionPtr = NativeMethods.unqlite_lib_version();
-                return Marshal.PtrToStringAnsi(versionPtr);
+                return Marshal.PtrToStringAnsi(versionPtr) ?? string.Empty;
             }
         }
 
@@ -46,7 +86,7 @@ namespace UnqliteNet
             get
             {
                 IntPtr sigPtr = NativeMethods.unqlite_lib_signature();
-                return Marshal.PtrToStringAnsi(sigPtr);
+                return Marshal.PtrToStringAnsi(sigPtr) ?? string.Empty;
             }
         }
 
@@ -55,7 +95,7 @@ namespace UnqliteNet
             get
             {
                 IntPtr identPtr = NativeMethods.unqlite_lib_ident();
-                return Marshal.PtrToStringAnsi(identPtr);
+                return Marshal.PtrToStringAnsi(identPtr) ?? string.Empty;
             }
         }
 
@@ -64,7 +104,7 @@ namespace UnqliteNet
             get
             {
                 IntPtr copyrightPtr = NativeMethods.unqlite_lib_copyright();
-                return Marshal.PtrToStringAnsi(copyrightPtr);
+                return Marshal.PtrToStringAnsi(copyrightPtr) ?? string.Empty;
             }
         }
 
@@ -103,7 +143,7 @@ namespace UnqliteNet
         public void Store(string key, byte[] data)
         {
             byte[] keyBytes = Encoding.UTF8.GetBytes(key);
-            int rc = NativeMethods.unqlite_kv_store(_dbHandle, keyBytes, keyBytes.Length, data, data.LongLength);
+            int rc = NativeMethods.unqlite_kv_store(Handle, keyBytes, keyBytes.Length, data, data.LongLength);
             UnqliteException.ThrowOnError(rc);
         }
 
@@ -116,17 +156,17 @@ namespace UnqliteNet
         public void Append(string key, byte[] data)
         {
             byte[] keyBytes = Encoding.UTF8.GetBytes(key);
-            int rc = NativeMethods.unqlite_kv_append(_dbHandle, keyBytes, keyBytes.Length, data, data.LongLength);
+            int rc = NativeMethods.unqlite_kv_append(Handle, keyBytes, keyBytes.Length, data, data.LongLength);
             UnqliteException.ThrowOnError(rc);
         }
 
-        public byte[] Fetch(string key)
+        public byte[]? Fetch(string key)
         {
             byte[] keyBytes = Encoding.UTF8.GetBytes(key);
             long dataLen = 0;
 
-            int rc = NativeMethods.unqlite_kv_fetch(_dbHandle, keyBytes, keyBytes.Length, null, ref dataLen);
-            
+            int rc = NativeMethods.unqlite_kv_fetch(Handle, keyBytes, keyBytes.Length, null!, ref dataLen);
+
             if (rc == NativeMethods.UNQLITE_NOTFOUND)
                 return null;
 
@@ -136,15 +176,15 @@ namespace UnqliteNet
                 return Array.Empty<byte>();
 
             byte[] data = new byte[dataLen];
-            rc = NativeMethods.unqlite_kv_fetch(_dbHandle, keyBytes, keyBytes.Length, data, ref dataLen);
+            rc = NativeMethods.unqlite_kv_fetch(Handle, keyBytes, keyBytes.Length, data, ref dataLen);
             UnqliteException.ThrowOnError(rc);
 
             return data;
         }
 
-        public string FetchString(string key)
+        public string? FetchString(string key)
         {
-            byte[] data = Fetch(key);
+            byte[]? data = Fetch(key);
             return data == null ? null : Encoding.UTF8.GetString(data);
         }
 
@@ -156,18 +196,18 @@ namespace UnqliteNet
         public void Delete(string key)
         {
             byte[] keyBytes = Encoding.UTF8.GetBytes(key);
-            int rc = NativeMethods.unqlite_kv_delete(_dbHandle, keyBytes, keyBytes.Length);
+            int rc = NativeMethods.unqlite_kv_delete(Handle, keyBytes, keyBytes.Length);
             UnqliteException.ThrowOnError(rc);
         }
 
         public UnqliteTransaction BeginTransaction()
         {
-            return new UnqliteTransaction(_dbHandle);
+            return new UnqliteTransaction(Handle);
         }
 
         public UnqliteCursor CreateCursor()
         {
-            return new UnqliteCursor(_dbHandle);
+            return new UnqliteCursor(Handle);
         }
 
         public IEnumerable<KeyValuePair<string, byte[]>> GetAll()
@@ -178,7 +218,8 @@ namespace UnqliteNet
 
             do
             {
-                yield return new KeyValuePair<string, byte[]>(cursor.Key, cursor.Data);
+                if (cursor.Data != null)
+                    yield return new KeyValuePair<string, byte[]>(cursor.Key, cursor.Data);
             } while (cursor.Next());
         }
 
@@ -197,14 +238,14 @@ namespace UnqliteNet
         // Jx9 VM compilation and execution
         public UnqliteVm Compile(string jx9Script)
         {
-            int rc = NativeMethods.unqlite_compile(_dbHandle, jx9Script, jx9Script.Length, out IntPtr vmHandle);
+            int rc = NativeMethods.unqlite_compile(Handle, jx9Script, jx9Script.Length, out IntPtr vmHandle);
             UnqliteException.ThrowOnError(rc);
             return new UnqliteVm(vmHandle);
         }
 
         public UnqliteVm CompileFile(string filePath)
         {
-            int rc = NativeMethods.unqlite_compile_file(_dbHandle, filePath, out IntPtr vmHandle);
+            int rc = NativeMethods.unqlite_compile_file(Handle, filePath, out IntPtr vmHandle);
             UnqliteException.ThrowOnError(rc);
             return new UnqliteVm(vmHandle);
         }
@@ -212,66 +253,66 @@ namespace UnqliteNet
         // Configuration methods
         public void SetMaxPageCache(int maxPages)
         {
-            int rc = NativeMethods.unqlite_config(_dbHandle, NativeMethods.UNQLITE_CONFIG_MAX_PAGE_CACHE, __arglist(maxPages));
+            int rc = NativeMethods.unqlite_config(Handle, NativeMethods.UNQLITE_CONFIG_MAX_PAGE_CACHE, __arglist(maxPages));
             UnqliteException.ThrowOnError(rc);
         }
 
         public void DisableAutoCommit()
         {
-            int rc = NativeMethods.unqlite_config(_dbHandle, NativeMethods.UNQLITE_CONFIG_DISABLE_AUTO_COMMIT, __arglist());
+            int rc = NativeMethods.unqlite_config(Handle, NativeMethods.UNQLITE_CONFIG_DISABLE_AUTO_COMMIT, __arglist());
             UnqliteException.ThrowOnError(rc);
         }
 
         public string GetKvEngineName()
         {
             IntPtr namePtr = IntPtr.Zero;
-            int rc = NativeMethods.unqlite_config(_dbHandle, NativeMethods.UNQLITE_CONFIG_GET_KV_NAME, __arglist(ref namePtr));
+            int rc = NativeMethods.unqlite_config(Handle, NativeMethods.UNQLITE_CONFIG_GET_KV_NAME, __arglist(ref namePtr));
             UnqliteException.ThrowOnError(rc);
 
             if (namePtr == IntPtr.Zero)
                 return string.Empty;
 
-            return Marshal.PtrToStringAnsi(namePtr);
+            return Marshal.PtrToStringAnsi(namePtr) ?? string.Empty;
         }
 
         public string GetErrorLog()
         {
             IntPtr logPtr = IntPtr.Zero;
             int logLen = 0;
-            int rc = NativeMethods.unqlite_config(_dbHandle, NativeMethods.UNQLITE_CONFIG_ERR_LOG, __arglist(ref logPtr, ref logLen));
+            int rc = NativeMethods.unqlite_config(Handle, NativeMethods.UNQLITE_CONFIG_ERR_LOG, __arglist(ref logPtr, ref logLen));
             UnqliteException.ThrowOnError(rc);
 
             if (logPtr == IntPtr.Zero || logLen == 0)
                 return string.Empty;
 
-            return Marshal.PtrToStringAnsi(logPtr, logLen);
+            return Marshal.PtrToStringAnsi(logPtr, logLen) ?? string.Empty;
         }
 
         public string GetJx9ErrorLog()
         {
             IntPtr logPtr = IntPtr.Zero;
             int logLen = 0;
-            int rc = NativeMethods.unqlite_config(_dbHandle, NativeMethods.UNQLITE_CONFIG_JX9_ERR_LOG, __arglist(ref logPtr, ref logLen));
+            int rc = NativeMethods.unqlite_config(Handle, NativeMethods.UNQLITE_CONFIG_JX9_ERR_LOG, __arglist(ref logPtr, ref logLen));
             UnqliteException.ThrowOnError(rc);
 
             if (logPtr == IntPtr.Zero || logLen == 0)
                 return string.Empty;
 
-            return Marshal.PtrToStringAnsi(logPtr, logLen);
+            return Marshal.PtrToStringAnsi(logPtr, logLen) ?? string.Empty;
         }
 
         // Utility methods
         public string GenerateRandomString(int length)
         {
             byte[] buffer = new byte[length];
-            int rc = NativeMethods.unqlite_util_random_string(_dbHandle, buffer, (uint)length);
+            int rc = NativeMethods.unqlite_util_random_string(Handle, buffer, (uint)length);
             UnqliteException.ThrowOnError(rc);
             return Encoding.UTF8.GetString(buffer).TrimEnd('\0');
         }
 
         public uint GenerateRandomNumber()
         {
-            return NativeMethods.unqlite_util_random_num(_dbHandle);
+            return NativeMethods.unqlite_util_random_num(Handle);
         }
 
         public static byte[] LoadMemoryMappedFile(string filePath, out long fileSize)
@@ -305,7 +346,7 @@ namespace UnqliteNet
                 return 0;
             });
 
-            int rc = NativeMethods.unqlite_kv_fetch_callback(_dbHandle, keyBytes, keyBytes.Length, consumer, IntPtr.Zero);
+            int rc = NativeMethods.unqlite_kv_fetch_callback(Handle, keyBytes, keyBytes.Length, consumer, IntPtr.Zero);
 
             if (rc == NativeMethods.UNQLITE_NOTFOUND)
                 return;
@@ -313,32 +354,249 @@ namespace UnqliteNet
             UnqliteException.ThrowOnError(rc);
         }
 
-        protected virtual void Dispose(bool disposing)
+        // Span-based API for zero-copy operations
+        /// <summary>
+        /// Stores a key-value pair in the database using zero-copy Span API.
+        /// </summary>
+        /// <param name="key">The key as a byte span.</param>
+        /// <param name="data">The data to store as a byte span.</param>
+        public unsafe void Store(ReadOnlySpan<byte> key, ReadOnlySpan<byte> data)
         {
-            if (!_disposed)
+            fixed (byte* keyPtr = key)
+            fixed (byte* dataPtr = data)
             {
-                if (disposing)
-                {
-                }
-
-                if (_dbHandle != IntPtr.Zero)
-                {
-                    NativeMethods.unqlite_close(_dbHandle);
-                    _dbHandle = IntPtr.Zero;
-                }
-
-                _disposed = true;
+                int rc = NativeMethods.unqlite_kv_store(Handle, keyPtr, key.Length, dataPtr, data.Length);
+                UnqliteException.ThrowOnError(rc);
             }
         }
 
-        ~UnqliteDatabase()
+        /// <summary>
+        /// Appends data to an existing value in the database using zero-copy Span API.
+        /// </summary>
+        /// <param name="key">The key as a byte span.</param>
+        /// <param name="data">The data to append as a byte span.</param>
+        public unsafe void Append(ReadOnlySpan<byte> key, ReadOnlySpan<byte> data)
         {
-            Dispose(false);
+            fixed (byte* keyPtr = key)
+            fixed (byte* dataPtr = data)
+            {
+                int rc = NativeMethods.unqlite_kv_append(Handle, keyPtr, key.Length, dataPtr, data.Length);
+                UnqliteException.ThrowOnError(rc);
+            }
         }
 
+        /// <summary>
+        /// Deletes a key-value pair from the database using zero-copy Span API.
+        /// </summary>
+        /// <param name="key">The key as a byte span.</param>
+        public unsafe void Delete(ReadOnlySpan<byte> key)
+        {
+            fixed (byte* keyPtr = key)
+            {
+                int rc = NativeMethods.unqlite_kv_delete(Handle, keyPtr, key.Length);
+                UnqliteException.ThrowOnError(rc);
+            }
+        }
+
+        /// <summary>
+        /// Fetches data from the database into a pre-allocated buffer using zero-copy Span API.
+        /// </summary>
+        /// <param name="key">The key as a byte span.</param>
+        /// <param name="buffer">The buffer to write the data into.</param>
+        /// <returns>The number of bytes written to the buffer, or -1 if the key was not found.</returns>
+        public unsafe int TryFetch(ReadOnlySpan<byte> key, Span<byte> buffer)
+        {
+            long dataLen = buffer.Length;
+
+            fixed (byte* keyPtr = key)
+            fixed (byte* bufferPtr = buffer)
+            {
+                int rc = NativeMethods.unqlite_kv_fetch(Handle, keyPtr, key.Length, bufferPtr, ref dataLen);
+
+                if (rc == NativeMethods.UNQLITE_NOTFOUND)
+                    return -1;
+
+                UnqliteException.ThrowOnError(rc);
+                return (int)dataLen;
+            }
+        }
+
+        /// <summary>
+        /// Fetches data from the database and returns it as a byte array using zero-copy Span API for the key.
+        /// </summary>
+        /// <param name="key">The key as a byte span.</param>
+        /// <returns>The data as a byte array, or null if the key was not found.</returns>
+        public unsafe byte[]? Fetch(ReadOnlySpan<byte> key)
+        {
+            long dataLen = 0;
+
+            fixed (byte* keyPtr = key)
+            {
+                int rc = NativeMethods.unqlite_kv_fetch(Handle, keyPtr, key.Length, null, ref dataLen);
+
+                if (rc == NativeMethods.UNQLITE_NOTFOUND)
+                    return null;
+
+                UnqliteException.ThrowOnError(rc);
+
+                if (dataLen == 0)
+                    return Array.Empty<byte>();
+
+                byte[] data = new byte[dataLen];
+                fixed (byte* dataPtr = data)
+                {
+                    rc = NativeMethods.unqlite_kv_fetch(Handle, keyPtr, key.Length, dataPtr, ref dataLen);
+                    UnqliteException.ThrowOnError(rc);
+                }
+
+                return data;
+            }
+        }
+
+        /// <summary>
+        /// Checks if a key exists in the database using zero-copy Span API.
+        /// </summary>
+        /// <param name="key">The key as a byte span.</param>
+        /// <returns>True if the key exists, false otherwise.</returns>
+        public bool Contains(ReadOnlySpan<byte> key)
+        {
+            return Fetch(key) != null;
+        }
+
+        // Try-Get pattern methods (no exceptions on expected failures)
+        /// <summary>
+        /// Attempts to fetch data from the database without throwing exceptions.
+        /// </summary>
+        /// <param name="key">The key to fetch.</param>
+        /// <param name="data">The fetched data, or null if not found.</param>
+        /// <returns>True if the key was found, false otherwise.</returns>
+        public bool TryFetch(string key, out byte[]? data)
+        {
+            byte[] keyBytes = Encoding.UTF8.GetBytes(key);
+            long dataLen = 0;
+
+            int rc = NativeMethods.unqlite_kv_fetch(Handle, keyBytes, keyBytes.Length, null!, ref dataLen);
+
+            if (rc == NativeMethods.UNQLITE_NOTFOUND)
+            {
+                data = null;
+                return false;
+            }
+
+            if (rc != NativeMethods.UNQLITE_OK)
+            {
+                data = null;
+                return false;
+            }
+
+            if (dataLen == 0)
+            {
+                data = Array.Empty<byte>();
+                return true;
+            }
+
+            data = new byte[dataLen];
+            rc = NativeMethods.unqlite_kv_fetch(Handle, keyBytes, keyBytes.Length, data, ref dataLen);
+
+            if (rc != NativeMethods.UNQLITE_OK)
+            {
+                data = null;
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Attempts to store data in the database without throwing exceptions.
+        /// </summary>
+        /// <param name="key">The key to store.</param>
+        /// <param name="data">The data to store.</param>
+        /// <returns>True if successful, false otherwise.</returns>
+        public bool TryStore(string key, byte[] data)
+        {
+            byte[] keyBytes = Encoding.UTF8.GetBytes(key);
+            int rc = NativeMethods.unqlite_kv_store(Handle, keyBytes, keyBytes.Length, data, data.LongLength);
+            return rc == NativeMethods.UNQLITE_OK;
+        }
+
+        /// <summary>
+        /// Attempts to store data in the database without throwing exceptions (Span version).
+        /// </summary>
+        /// <param name="key">The key as a byte span.</param>
+        /// <param name="data">The data to store as a byte span.</param>
+        /// <returns>True if successful, false otherwise.</returns>
+        public unsafe bool TryStore(ReadOnlySpan<byte> key, ReadOnlySpan<byte> data)
+        {
+            fixed (byte* keyPtr = key)
+            fixed (byte* dataPtr = data)
+            {
+                int rc = NativeMethods.unqlite_kv_store(Handle, keyPtr, key.Length, dataPtr, data.Length);
+                return rc == NativeMethods.UNQLITE_OK;
+            }
+        }
+
+        /// <summary>
+        /// Attempts to append data to an existing value without throwing exceptions.
+        /// </summary>
+        /// <param name="key">The key to append to.</param>
+        /// <param name="data">The data to append.</param>
+        /// <returns>True if successful, false otherwise.</returns>
+        public bool TryAppend(string key, byte[] data)
+        {
+            byte[] keyBytes = Encoding.UTF8.GetBytes(key);
+            int rc = NativeMethods.unqlite_kv_append(Handle, keyBytes, keyBytes.Length, data, data.LongLength);
+            return rc == NativeMethods.UNQLITE_OK;
+        }
+
+        /// <summary>
+        /// Attempts to append data to an existing value without throwing exceptions (Span version).
+        /// </summary>
+        /// <param name="key">The key as a byte span.</param>
+        /// <param name="data">The data to append as a byte span.</param>
+        /// <returns>True if successful, false otherwise.</returns>
+        public unsafe bool TryAppend(ReadOnlySpan<byte> key, ReadOnlySpan<byte> data)
+        {
+            fixed (byte* keyPtr = key)
+            fixed (byte* dataPtr = data)
+            {
+                int rc = NativeMethods.unqlite_kv_append(Handle, keyPtr, key.Length, dataPtr, data.Length);
+                return rc == NativeMethods.UNQLITE_OK;
+            }
+        }
+
+        /// <summary>
+        /// Attempts to delete a key-value pair without throwing exceptions.
+        /// </summary>
+        /// <param name="key">The key to delete.</param>
+        /// <returns>True if successful, false otherwise.</returns>
+        public bool TryDelete(string key)
+        {
+            byte[] keyBytes = Encoding.UTF8.GetBytes(key);
+            int rc = NativeMethods.unqlite_kv_delete(Handle, keyBytes, keyBytes.Length);
+            return rc == NativeMethods.UNQLITE_OK;
+        }
+
+        /// <summary>
+        /// Attempts to delete a key-value pair without throwing exceptions (Span version).
+        /// </summary>
+        /// <param name="key">The key as a byte span.</param>
+        /// <returns>True if successful, false otherwise.</returns>
+        public unsafe bool TryDelete(ReadOnlySpan<byte> key)
+        {
+            fixed (byte* keyPtr = key)
+            {
+                int rc = NativeMethods.unqlite_kv_delete(Handle, keyPtr, key.Length);
+                return rc == NativeMethods.UNQLITE_OK;
+            }
+        }
+
+        /// <summary>
+        /// Releases the resources used by the database.
+        /// </summary>
         public void Dispose()
         {
-            Dispose(true);
+            _dbHandle?.Dispose();
             GC.SuppressFinalize(this);
         }
     }

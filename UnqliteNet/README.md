@@ -1,8 +1,12 @@
 # UnqliteNet - .NET Wrapper for UnQLite
 
-.NET wrapper for the UnQLite embedded NoSQL database.
+A high-performance, idiomatic .NET wrapper for **UnQLite** — the embeddable NoSQL database engine.
 
-## Features
+**UnqliteNet** brings the power of UnQLite (Key-Value Store + Document Store + Jx9 Scripting) to the .NET ecosystem, focusing on zero-allocation APIs, memory safety, and seamless interoperability.
+
+## Key Technical Achievements
+
+This wrapper is not just a raw P/Invoke binding. It implements advanced .NET performance patterns inspired by libraries like `Lightning.NET`.
 
 - Simple and modern C# API (.NET 9.0)
 - Basic Key/Value operations (Store, Fetch, Delete)
@@ -10,6 +14,24 @@
 - Cursor to iterate over all records
 - Support for in-memory and disk-based databases
 - Thread-safe
+
+### 1. Zero-Copy Architecture
+
+* **Span-Based API:** heavily utilizes `ReadOnlySpan<byte>` and `Span<byte>` to interact with the native engine.
+* **Direct Memory Access:** Uses `unsafe` and `fixed` pointers to pass data to C-land without intermediate `byte[]` allocations, significantly reducing Garbage Collector (GC) pressure during high-throughput read/write operations.
+* **Stack Allocation:** Intelligent usage of `stackalloc` for small keys to avoid heap allocations entirely.
+
+### 2. Robust Resource Management
+
+* **SafeHandles:** Encapsulates native pointers (`unqlite*`, `unqlite_vm*`) using `SafeHandleZeroOrMinusOneIsInvalid`, ensuring critical resources are released deterministically even during catastrophic failures.
+* **Disposable Pattern:** Full implementation of `IDisposable` across the hierarchy (`Database` → `Transaction` → `Cursor`).
+* **Auto-Rollback:** Transactions automatically issue a `ROLLBACK` if disposed without an explicit `Commit()`, preventing database corruption due to unhandled exceptions.
+
+### 3. Advanced Interoperability (Jx9)
+
+* **Foreign Functions:** Allows extending the Jx9 scripting language with C# methods.
+* **Delegate Pinning:** Implements a robust `GCHandle` pinning strategy to prevent the Garbage Collector from relocating C# delegates passed to the native UnQLite engine as callbacks.
+* **Dynamic Value Mapping:** Seamlessly converts between UnQLite dynamic types (Scalar, Array, JSON) and .NET types.
 
 ## Building
 
@@ -25,86 +47,118 @@ cd UnqliteNet
 dotnet build --configuration Release
 ```
 
-## Usage
+## Installation
 
-### Basic
+*(Add NuGet instructions here once published)*
+
+```bash
+dotnet add package UnqliteNet
+
+```
+
+## Quick Start
+
+### Key-Value Store (Zero-Copy)
 
 ```csharp
 using UnqliteNet;
+using System.Text;
 
-// Open database
-using var db = new UnqliteDatabase("test.db");
+using var db = new UnqliteDatabase("data.db");
 
-// Store data
-db.Store("name", "Juan Pérez");
-db.Store("age", "30");
+// Store using Spans (Zero allocation overhead)
+Span<byte> key = Encoding.UTF8.GetBytes("user:101");
+Span<byte> value = Encoding.UTF8.GetBytes("{ 'name': 'Miguel' }");
 
-// Retrieve data
-string name = db.FetchString("name");
-byte[] data = db.Fetch("age");
+db.Store(key, value);
 
-// Check if exists
-bool exists = db.Contains("name");
+// Fetch
+if (db.TryFetch(key, out byte[] result))
+{
+    Console.WriteLine($"Found: {Encoding.UTF8.GetString(result)}");
+}
 
-// Delete
-db.Delete("age");
 ```
 
-### Transactions
+### Jx9 Document Store & Scripting
+
+UnqliteNet exposes the full power of the Jx9 VM, allowing you to run complex logic inside the database engine.
 
 ```csharp
-using (var tx = db.BeginTransaction())
+using var db = new UnqliteDatabase("users.db");
+
+// Jx9 script to store a JSON document
+string script = @"
+    $user = { 'id': 1, 'name': 'Alice', 'role': 'admin' };
+    db_store('users', $user);
+    print 'User stored successfully';
+";
+
+using var vm = db.Compile(script);
+
+// Capture script output from C#
+vm.SetOutputHandler(output => Console.WriteLine($"VM Output: {output}"));
+
+vm.Execute();
+
+```
+
+### C# Foreign Functions in Jx9
+
+Extend the database language with .NET logic:
+
+```csharp
+using var vm = db.Compile("$result = my_csharp_func(10, 20); print $result;");
+
+// Register a C# function accessible from the script
+vm.CreateFunction("my_csharp_func", (ctx, args) => 
 {
-    db.Store("key1", "value1");
-    db.Store("key2", "value2");
+    int a = args[0].ToInt();
+    int b = args[1].ToInt();
     
-    // Commit changes
-    tx.Commit();
-    // Or rollback: tx.Rollback();
-}
+    // Return result back to Jx9 engine
+    ctx.SetResultInt(a + b);
+    return NativeMethods.UNQLITE_OK;
+});
+
+vm.Execute(); // Prints "30"
+
 ```
 
-### Cursor
+## Architecture
 
-```csharp
-// Iterate all records
-using var cursor = db.CreateCursor();
-if (cursor.First())
-{
-    do
-    {
-        Console.WriteLine($"{cursor.Key}: {cursor.DataAsString}");
-    } while (cursor.Next());
-}
+The library is organized into three layers:
 
-// Or using GetAll()
-foreach (var kvp in db.GetAll())
-{
-    Console.WriteLine($"{kvp.Key}: {Encoding.UTF8.GetString(kvp.Value)}");
-}
-```
+1. **Native Layer (`NativeMethods`):** Raw P/Invoke signatures matching the C header files.
+2. **Safe Layer (`SafeHandles`):** Wrappers that guarantee handle lifespan and cleanup.
+3. **Idiomatic Layer:** The public API (`UnqliteDatabase`, `UnqliteCursor`) that provides .NET idioms like `IEnumerable`, Exceptions instead of error codes, and Fluent Configuration.
 
-### In-Memory Databases
+## Roadmap & Future Improvements
 
-```csharp
-using var db = new UnqliteDatabase(":mem:", inMemory: true);
-```
+We welcome contributions! Here are the key areas suggested for future development:
 
-## Main Classes
+### 1. LINQ Provider for Jx9
 
-- `UnqliteDatabase` - Main database connection
-- `UnqliteTransaction` - Transaction handling
-- `UnqliteCursor` - Advanced record navigation
-- `UnqliteException` - UnQLite specific exceptions
+* **Goal:** Allow developers to write LINQ queries in C# that compile down to Jx9 scripts.
+* **Implementation:** Build an `IQueryable` provider that translates `db.Collection("users").Where(u => u.Age > 18)` into Jx9 filter logic.
 
-## Run Example
+### 2. POCO Serialization
 
-```bash
-cd UnqliteNet.Example
-dotnet run
-```
+* **Goal:** Automatic mapping between C# Classes and UnQLite JSON documents.
+* **Implementation:** Integrate `System.Text.Json` or `Newtonsoft` to allow generic methods like `db.Store<User>("key", userObj)`.
 
-## Requirements
+### 3. Async/Await Wrappers
 
-- .NET 9.0
-- unqlite_shared.dll (automatically copied from build/Release/)
+* **Goal:** Although UnQLite is synchronous by nature (embedded), providing `Task`-based wrappers (via `Task.Run`) could improve responsiveness in UI applications, though care must be taken with thread affinity.
+
+### 4. Comparison with LMDB (Lightning.NET)
+
+* **Goal:** Benchmarks comparing raw KV performance against `Lightning.NET`. UnQLite is feature-rich, but knowing the throughput difference helps developers choose the right tool.
+
+## License
+
+Licensed under the MIT License. See [LICENSE](https://www.google.com/search?q=LICENSE) for details.
+
+---
+
+**Copyright (c) 2025 Miguel Hernández**

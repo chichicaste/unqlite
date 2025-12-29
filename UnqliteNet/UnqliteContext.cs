@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Miguel Hernández
+// Licensed under the MIT License. See LICENSE file in the project root for full license information.
+
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -108,7 +111,7 @@ namespace UnqliteNet
                 IntPtr namePtr = NativeMethods.unqlite_function_name(Handle);
                 if (namePtr == IntPtr.Zero)
                     return string.Empty;
-                return Marshal.PtrToStringAnsi(namePtr);
+                return Marshal.PtrToStringAnsi(namePtr) ?? string.Empty;
             }
         }
 

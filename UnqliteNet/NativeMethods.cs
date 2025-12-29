@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Miguel Hernández
+// Licensed under the MIT License. See LICENSE file in the project root for full license information.
+
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -105,13 +108,25 @@ namespace UnqliteNet
         public static extern int unqlite_kv_store(IntPtr pDb, byte[] pKey, int nKeyLen, byte[] pData, long nDataLen);
 
         [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+        public static unsafe extern int unqlite_kv_store(IntPtr pDb, byte* pKey, int nKeyLen, byte* pData, long nDataLen);
+
+        [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
         public static extern int unqlite_kv_append(IntPtr pDb, byte[] pKey, int nKeyLen, byte[] pData, long nDataLen);
+
+        [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+        public static unsafe extern int unqlite_kv_append(IntPtr pDb, byte* pKey, int nKeyLen, byte* pData, long nDataLen);
 
         [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
         public static extern int unqlite_kv_fetch(IntPtr pDb, byte[] pKey, int nKeyLen, byte[] pBuf, ref long pBufLen);
 
         [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+        public static unsafe extern int unqlite_kv_fetch(IntPtr pDb, byte* pKey, int nKeyLen, byte* pBuf, ref long pBufLen);
+
+        [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
         public static extern int unqlite_kv_delete(IntPtr pDb, byte[] pKey, int nKeyLen);
+
+        [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+        public static unsafe extern int unqlite_kv_delete(IntPtr pDb, byte* pKey, int nKeyLen);
 
         [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
         public static extern int unqlite_begin(IntPtr pDb);

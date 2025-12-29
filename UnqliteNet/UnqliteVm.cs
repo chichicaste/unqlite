@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Miguel Hernández
+// Licensed under the MIT License. See LICENSE file in the project root for full license information.
+
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
@@ -101,8 +104,35 @@ namespace UnqliteNet
             UnqliteException.ThrowOnError(rc);
         }
 
-        // Variable extraction
-        public UnqliteValue ExtractVariable(string name)
+        /// <summary>
+        /// Extracts a variable from the VM after script execution.
+        /// </summary>
+        /// <param name="name">The name of the variable to extract.</param>
+        /// <returns>The extracted value, or null if the variable doesn't exist.</returns>
+        /// <remarks>
+        /// <para><b>ADVERTENCIA CRÍTICA:</b> El UnqliteValue retornado tiene un ciclo de vida vinculado a esta VM.</para>
+        /// <para>NO debe usar el valor extraído después de disponer esta VM. Hacerlo causará crashes.</para>
+        /// <para>
+        /// INCORRECTO:
+        /// <code>
+        /// UnqliteValue extractedValue;
+        /// using (var vm = db.CompileScript("...")) {
+        ///     extractedValue = vm.ExtractVariable("myVar"); // ¡Peligro!
+        /// } // VM se dispone
+        /// var x = extractedValue.ToInt(); // ¡CRASH!
+        /// </code>
+        /// </para>
+        /// <para>
+        /// CORRECTO:
+        /// <code>
+        /// using (var vm = db.CompileScript("...")) {
+        ///     var extractedValue = vm.ExtractVariable("myVar");
+        ///     var x = extractedValue.ToInt(); // OK
+        /// }
+        /// </code>
+        /// </para>
+        /// </remarks>
+        public UnqliteValue? ExtractVariable(string name)
         {
             IntPtr valueHandle = NativeMethods.unqlite_vm_extract_variable(Handle, name);
             if (valueHandle == IntPtr.Zero)
@@ -239,12 +269,17 @@ namespace UnqliteNet
         {
             if (!_disposed)
             {
+                // 1. Liberar recursos NO administrados (Punteros C)
+                // Esto se debe hacer SIEMPRE, sea disposing true o false
                 if (Handle != IntPtr.Zero)
                 {
                     NativeMethods.unqlite_vm_release(Handle);
                     Handle = IntPtr.Zero;
                 }
 
+                // 2. Liberar recursos administrados (GCHandles)
+                // OJO: Los GCHandles son especiales. Aunque son estructuras .NET,
+                // apuntan a memoria interna. Es seguro liberarlos aquí.
                 foreach (var handle in _pinnedHandles)
                 {
                     if (handle.IsAllocated)
@@ -252,13 +287,27 @@ namespace UnqliteNet
                 }
                 _pinnedHandles.Clear();
 
+                // 3. Validación de buenas prácticas (Solo Debug)
+                if (!disposing)
+                {
+                    // Loggear a consola de debug, pero NO lanzar excepción
+                    System.Diagnostics.Debug.WriteLine("Recurso UnqliteVm fugado (no se llamó a Dispose)");
+                }
+
                 _disposed = true;
             }
         }
 
         ~UnqliteVm()
         {
-            Dispose(false);
+            try
+            {
+                Dispose(false);
+            }
+            catch
+            {
+                // Suppress exceptions from finalizer to prevent crashing the application
+            }
         }
 
         public void Dispose()

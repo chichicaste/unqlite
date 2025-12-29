@@ -1,9 +1,44 @@
+// Copyright (c) 2025 Miguel Hernández
+// Licensed under the MIT License. See LICENSE file in the project root for full license information.
+
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
 
 namespace UnqliteNet
 {
+    /// <summary>
+    /// Represents a value in the UnQLite VM.
+    /// </summary>
+    /// <remarks>
+    /// <para>IMPORTANTE: UnqliteValue tiene un ciclo de vida vinculado a su VM o contexto.</para>
+    /// <para>
+    /// - Los valores extraídos de una VM (via ExtractVariable) NO deben usarse después de disponer la VM.
+    /// - Los valores creados en un contexto de función NO deben usarse después de que la función retorne.
+    /// - Siempre use 'using' o llame a Dispose() explícitamente cuando termine de usar el valor.
+    /// </para>
+    /// <para>
+    /// Ejemplo INCORRECTO:
+    /// <code>
+    /// UnqliteValue extractedValue;
+    /// using (var vm = db.CompileScript("..."))
+    /// {
+    ///     extractedValue = vm.ExtractVariable("myVar"); // Peligro!
+    /// } // VM se dispone aquí
+    /// var data = extractedValue.ToInt(); // ¡CRASH! VM ya no existe
+    /// </code>
+    /// </para>
+    /// <para>
+    /// Ejemplo CORRECTO:
+    /// <code>
+    /// using (var vm = db.CompileScript("..."))
+    /// {
+    ///     var extractedValue = vm.ExtractVariable("myVar");
+    ///     var data = extractedValue.ToInt(); // OK, VM todavía vive
+    /// } // VM se dispone aquí, todo seguro
+    /// </code>
+    /// </para>
+    /// </remarks>
     public class UnqliteValue : IDisposable
     {
         internal IntPtr Handle { get; private set; }
@@ -139,7 +174,7 @@ namespace UnqliteNet
         }
 
         // Array operations (if this is a JSON array/object)
-        public UnqliteValue GetArrayElement(string key)
+        public UnqliteValue? GetArrayElement(string key)
         {
             if (!IsJsonArray && !IsJsonObject)
                 throw new InvalidOperationException("Value is not a JSON array or object");
@@ -189,6 +224,8 @@ namespace UnqliteNet
         {
             if (!_disposed)
             {
+                // 1. Liberar recursos NO administrados (Punteros C)
+                // Esto se debe hacer SIEMPRE, sea disposing true o false
                 if (_autoRelease && Handle != IntPtr.Zero)
                 {
                     if (_vmHandle != IntPtr.Zero)
@@ -205,13 +242,28 @@ namespace UnqliteNet
                     }
                 }
                 Handle = IntPtr.Zero;
+
+                // 2. Validación de buenas prácticas (Solo Debug)
+                if (!disposing && _autoRelease)
+                {
+                    // Loggear a consola de debug, pero NO lanzar excepción
+                    System.Diagnostics.Debug.WriteLine("Recurso UnqliteValue fugado (no se llamó a Dispose)");
+                }
+
                 _disposed = true;
             }
         }
 
         ~UnqliteValue()
         {
-            Dispose(false);
+            try
+            {
+                Dispose(false);
+            }
+            catch
+            {
+                // Suppress exceptions from finalizer to prevent crashing the application
+            }
         }
 
         public void Dispose()

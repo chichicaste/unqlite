@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Miguel Hernández
+// Licensed under the MIT License. See LICENSE file in the project root for full license information.
+
 using System;
 using System.Text;
 
@@ -27,7 +30,7 @@ namespace UnqliteNet
 
                 // Try to compile a simple Jx9 script
                 string testScript = "print 'test';";
-                int rc = NativeMethods.unqlite_compile(db._dbHandle, testScript, testScript.Length, out IntPtr vmHandle);
+                int rc = NativeMethods.unqlite_compile(db.Handle, testScript, testScript.Length, out IntPtr vmHandle);
 
                 if (rc == NativeMethods.UNQLITE_OK && vmHandle != IntPtr.Zero)
                 {
@@ -261,7 +264,7 @@ namespace UnqliteNet
         /// </summary>
         internal static IntPtr GetDbHandle(UnqliteDatabase db)
         {
-            return db._dbHandle;
+            return db.Handle;
         }
     }
 }

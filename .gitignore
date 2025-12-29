@@ -16,6 +16,7 @@ libunqlite.a
 **/obj/
 *.user
 *.suo
+*.bat
 
 
 # Build
