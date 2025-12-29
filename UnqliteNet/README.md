@@ -4,7 +4,7 @@ A high-performance, idiomatic .NET wrapper for **UnQLite** — the embeddable No
 
 **UnqliteNet** brings the power of UnQLite (Key-Value Store + Document Store + Jx9 Scripting) to the .NET ecosystem, focusing on zero-allocation APIs, memory safety, and seamless interoperability.
 
-## Key Technical Achievements
+## Key technical achievements
 
 This wrapper is not just a raw P/Invoke binding. It implements advanced .NET performance patterns inspired by libraries like `Lightning.NET`.
 
@@ -15,19 +15,19 @@ This wrapper is not just a raw P/Invoke binding. It implements advanced .NET per
 - Support for in-memory and disk-based databases
 - Thread-safe
 
-### 1. Zero-Copy Architecture
+### 1. Zero-Copy architecture
 
 * **Span-Based API:** heavily utilizes `ReadOnlySpan<byte>` and `Span<byte>` to interact with the native engine.
 * **Direct Memory Access:** Uses `unsafe` and `fixed` pointers to pass data to C-land without intermediate `byte[]` allocations, significantly reducing Garbage Collector (GC) pressure during high-throughput read/write operations.
 * **Stack Allocation:** Intelligent usage of `stackalloc` for small keys to avoid heap allocations entirely.
 
-### 2. Robust Resource Management
+### 2. Robust resource management
 
 * **SafeHandles:** Encapsulates native pointers (`unqlite*`, `unqlite_vm*`) using `SafeHandleZeroOrMinusOneIsInvalid`, ensuring critical resources are released deterministically even during catastrophic failures.
 * **Disposable Pattern:** Full implementation of `IDisposable` across the hierarchy (`Database` → `Transaction` → `Cursor`).
 * **Auto-Rollback:** Transactions automatically issue a `ROLLBACK` if disposed without an explicit `Commit()`, preventing database corruption due to unhandled exceptions.
 
-### 3. Advanced Interoperability (Jx9)
+### 3. Advanced interoperability (Jx9)
 
 * **Foreign Functions:** Allows extending the Jx9 scripting language with C# methods.
 * **Delegate Pinning:** Implements a robust `GCHandle` pinning strategy to prevent the Garbage Collector from relocating C# delegates passed to the native UnQLite engine as callbacks.
@@ -58,7 +58,7 @@ dotnet add package UnqliteNet
 
 ## Quick Start
 
-### Key-Value Store (Zero-Copy)
+### Key-Value store (Zero-Copy)
 
 ```csharp
 using UnqliteNet;
@@ -80,7 +80,7 @@ if (db.TryFetch(key, out byte[] result))
 
 ```
 
-### Jx9 Document Store & Scripting
+### Jx9 Document store & scripting
 
 UnqliteNet exposes the full power of the Jx9 VM, allowing you to run complex logic inside the database engine.
 
@@ -103,7 +103,7 @@ vm.Execute();
 
 ```
 
-### C# Foreign Functions in Jx9
+### C# foreign functions in Jx9
 
 Extend the database language with .NET logic:
 
@@ -133,16 +133,16 @@ The library is organized into three layers:
 2. **Safe Layer (`SafeHandles`):** Wrappers that guarantee handle lifespan and cleanup.
 3. **Idiomatic Layer:** The public API (`UnqliteDatabase`, `UnqliteCursor`) that provides .NET idioms like `IEnumerable`, Exceptions instead of error codes, and Fluent Configuration.
 
-## Roadmap & Future Improvements
+## Roadmap & Future improvements
 
 We welcome contributions! Here are the key areas suggested for future development:
 
-### 1. LINQ Provider for Jx9
+### 1. LINQ provider for Jx9
 
 * **Goal:** Allow developers to write LINQ queries in C# that compile down to Jx9 scripts.
 * **Implementation:** Build an `IQueryable` provider that translates `db.Collection("users").Where(u => u.Age > 18)` into Jx9 filter logic.
 
-### 2. POCO Serialization
+### 2. POCO serialization
 
 * **Goal:** Automatic mapping between C# Classes and UnQLite JSON documents.
 * **Implementation:** Integrate `System.Text.Json` or `Newtonsoft` to allow generic methods like `db.Store<User>("key", userObj)`.
@@ -151,9 +151,9 @@ We welcome contributions! Here are the key areas suggested for future developmen
 
 * **Goal:** Although UnQLite is synchronous by nature (embedded), providing `Task`-based wrappers (via `Task.Run`) could improve responsiveness in UI applications, though care must be taken with thread affinity.
 
-### 4. Comparison with LMDB (Lightning.NET)
+### 4. Comparison
 
-* **Goal:** Benchmarks comparing raw KV performance against `Lightning.NET`. UnQLite is feature-rich, but knowing the throughput difference helps developers choose the right tool.
+* **Goal:** Benchmarks comparing raw KV performance. UnQLite is feature-rich, but knowing the throughput difference helps developers choose the right tool.
 
 ## License
 
